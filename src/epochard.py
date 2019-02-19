@@ -39,12 +39,12 @@ def main(arg):
         print("%s\t%s" % (arg, date))
     else:
         if os.path.isdir(arg):
-            backups = get_backups(args)
+            backups = get_backups(arg)
         else:
             backups = [arg]
         dates = get_all_dates_from_list_of_backup_strings(r'(?<=config\.)(\d+)(?=\.xml)', backups)
         for date in dates:
-            print("%s\t%s" % (dates[date]['filename'], date))
+            print("%s\t%s" % (os.path.basename(dates[date]['filename']), date))
     
 
 if __name__ == '__main__':
