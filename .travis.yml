@@ -1,0 +1,47 @@
+language: python
+sudo: required
+services:
+- docker
+env:
+- SH="docker exec -t epochard bash -c"
+before_install:
+- docker run --detach --name epochard -v $(pwd):/travis -w /travis python:3.7-slim-stretch
+  tail -f /dev/null
+- docker ps
+addons:
+  apt:
+    update: true
+    packages:
+    - openvpn # need for deployment
+    - psmisc  # need for killall
+  on:
+    branch: master
+install:
+- $SH "pip install pipenv"
+- $SH "pipenv install --dev --system"
+script: skip
+after_failure:
+- curl -X POST -d 'message="epochard build failed"' https://${HOME_API_USER}:${HOME_API_AUTHKEY}@${HOME_API_SERVER}/api/pushover
+after_success:
+- curl -X POST -d 'message="epochard build successful"' https://${HOME_API_USER}:${HOME_API_AUTHKEY}@${HOME_API_SERVER}/api/pushover
+before_deploy:
+- $SH "apt-get update -qy && apt-get install --no-install-recommends -qfy python-dev python-setuptools build-essential"
+- openssl aes-256-cbc -K "${SSL_KEY}" -iv "${SSL_IV}" -in .travis/secrets.enc -out secrets.tar -d
+- tar xvf secrets.tar
+# setup ssh
+- nohup sudo openvpn deploy.ovpn > /dev/null 2>&1 &
+- sleep 30
+- ping -c 4 $REMOTE_SERVER
+- mv id_rsa ~/.ssh/
+- sudo chmod 600 ~/.ssh/id_rsa
+- ssh-keyscan -H $REMOTE_SERVER > ~/.ssh/known_hosts
+# build binaries
+- $SH "pyinstaller --distpath /travis/bin/ --onefile /travis/src/epochard.py"
+deploy:
+  skip_cleanup: true
+  provider: script
+  script: bash .travis/deploy.sh
+  on:
+    branch: master
+after_deploy:
+- sudo killall openvpn || sudo killall nohup
